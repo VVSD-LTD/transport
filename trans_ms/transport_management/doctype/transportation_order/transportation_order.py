@@ -320,71 +320,169 @@ def assign_vehicle(**args):
     return "success"
 
 
+# @frappe.whitelist()
+# def create_sales_invoice(doc, rows):
+#     doc = frappe.get_doc(json.loads(doc))
+#     rows = json.loads(rows)
+#     if not rows:
+#         return
+#     items = []
+#     item_row_per = []
+#     for row in rows:
+#         description = ""
+#         if row["assigned_vehicle"]:
+#             description += "<b>VEHICLE NUMBER: " + row["assigned_vehicle"]
+#         if row["route"]:
+#             description += "<BR>ROUTE: " + row["route"]
+#         item = frappe._dict({
+#                 "item_code": row["item"],
+#                 "qty": 1,
+#                 "uom": frappe.get_value("Item", row["item"], "stock_uom"),
+#                 "rate": row["rate"],
+#                 "description": description,
+#             }
+#         )
+#         item_row_per.append([row, item])
+#         items.append(item)
+#     invoice = frappe.get_doc(
+#         dict(
+#             doctype="Sales Invoice",
+#             customer=doc.customer,
+#             currency=row["currency"],
+#             posting_date=nowdate(),
+#             company=doc.company,
+#             items=items,
+#         ),
+#     )
+
+#     # Set dynamic dept_abbr for naming series
+#     # You may adjust this lookup based on actual source (e.g. department field on customer, or company code)
+#     dept_abbr = ""
+#     if hasattr(doc, "department_abbr"):
+#         dept_abbr = doc.department_abbr
+#     elif frappe.db.has_column("Customer", "department_abbr"):
+#         dept_abbr = frappe.db.get_value("Customer", doc.customer, "department_abbr")
+#     elif frappe.db.has_column("Company", "abbr"):
+#         dept_abbr = frappe.db.get_value("Company", doc.company, "abbr")
+
+#     if not dept_abbr:
+#         frappe.throw("Missing department abbreviation (dept_abbr) for naming series.")
+
+#     # Manually assign name using dynamic naming pattern
+#     invoice.naming_series = None  # override automatic series assignment
+#     invoice.name = make_autoname(f"ACC-SINV-{dept_abbr}-.YYYY.-")
+
+#     # set_dimension(doc, invoice, src_child=row)
+#     for i in item_row_per:
+#         set_dimension(doc, invoice, src_child=i[0], tr_child=i[1])
+
+#     frappe.flags.ignore_account_permission = True
+#     invoice.set_taxes()
+#     invoice.set_missing_values()
+#     invoice.flags.ignore_mandatory = True
+#     invoice.calculate_taxes_and_totals()
+#     invoice.insert(ignore_permissions=True)
+#     for item in doc.assign_transport:
+#         if item.name in [i["name"] for i in rows]:
+#             item.invoice = invoice.name
+#     doc.save()
+#     frappe.msgprint(_("Sales Inoice {0} Created").format(invoice.name), alert=True)
+#     return invoice
+
+
 @frappe.whitelist()
 def create_sales_invoice(doc, rows):
-    doc = frappe.get_doc(json.loads(doc))
-    rows = json.loads(rows)
-    if not rows:
-        return
-    items = []
-    item_row_per = []
-    for row in rows:
-        description = ""
-        if row["assigned_vehicle"]:
-            description += "<b>VEHICLE NUMBER: " + row["assigned_vehicle"]
-        if row["route"]:
-            description += "<BR>ROUTE: " + row["route"]
-        item = frappe._dict({
+    import json
+    from frappe.model.naming import make_autoname
+    from frappe.utils import nowdate
+    from frappe import _
+
+    try:
+        doc = frappe.get_doc(json.loads(doc))
+        rows = json.loads(rows)
+        if not rows:
+            return
+
+        items = []
+
+        for row in rows:
+            description = ""
+            if row.get("assigned_vehicle"):
+                description += "<b>VEHICLE NUMBER: " + row["assigned_vehicle"]
+            if row.get("route"):
+                description += "<br>ROUTE: " + row["route"]
+
+            # Create a new item dict
+            item = frappe._dict({
                 "item_code": row["item"],
                 "qty": 1,
                 "uom": frappe.get_value("Item", row["item"], "stock_uom"),
                 "rate": row["rate"],
-                "description": description,
-            }
-        )
-        item_row_per.append([row, item])
-        items.append(item)
-    invoice = frappe.get_doc(
-        dict(
-            doctype="Sales Invoice",
-            customer=doc.customer,
-            currency=row["currency"],
-            posting_date=nowdate(),
-            company=doc.company,
-            items=items,
-        ),
-    )
+                "description": description
+            })
 
-    # Set dynamic dept_abbr for naming series
-    # You may adjust this lookup based on actual source (e.g. department field on customer, or company code)
-    dept_abbr = ""
-    if hasattr(doc, "department_abbr"):
-        dept_abbr = doc.department_abbr
-    elif frappe.db.has_column("Customer", "department_abbr"):
-        dept_abbr = frappe.db.get_value("Customer", doc.customer, "department_abbr")
-    elif frappe.db.has_column("Company", "abbr"):
-        dept_abbr = frappe.db.get_value("Company", doc.company, "abbr")
+            items.append(item)
 
-    if not dept_abbr:
-        frappe.throw("Missing department abbreviation (dept_abbr) for naming series.")
+        # Create the invoice document
+        invoice = frappe.get_doc({
+            "doctype": "Sales Invoice",
+            "customer": doc.customer,
+            "currency": rows[0]["currency"],
+            "posting_date": nowdate(),
+            "company": doc.company,
+            "items": items
+        })
 
-    # Manually assign name using dynamic naming pattern
-    invoice.naming_series = None  # override automatic series assignment
-    invoice.name = make_autoname(f"ACC-SINV-{dept_abbr}-.YYYY.-")
+        # Set naming series manually based on department_abbr
+        dept_abbr = ""
+        if hasattr(doc, "department_abbr") and doc.department_abbr:
+            dept_abbr = doc.department_abbr
+        elif frappe.db.has_column("Customer", "department_abbr"):
+            dept_abbr = frappe.db.get_value("Customer", doc.customer, "department_abbr")
+        elif frappe.db.has_column("Company", "abbr"):
+            dept_abbr = frappe.db.get_value("Company", doc.company, "abbr")
 
-    set_dimension(doc, invoice, src_child=row)
-    for i in item_row_per:
-        set_dimension(doc, invoice, src_child=i[0], tr_child=i[1])
+        if not dept_abbr:
+            frappe.throw("Missing department abbreviation (dept_abbr) for naming series.")
 
-    frappe.flags.ignore_account_permission = True
-    invoice.set_taxes()
-    invoice.set_missing_values()
-    invoice.flags.ignore_mandatory = True
-    invoice.calculate_taxes_and_totals()
-    invoice.insert(ignore_permissions=True)
-    for item in doc.assign_transport:
-        if item.name in [i["name"] for i in rows]:
-            item.invoice = invoice.name
-    doc.save()
-    frappe.msgprint(_("Sales Inoice {0} Created").format(invoice.name), alert=True)
-    return invoice
+        invoice.naming_series = None
+        invoice.name = make_autoname(f"ACC-SINV-{dept_abbr}-.YYYY.-")
+
+        # Apply dimensions - Main document level first
+        try:
+            set_dimension(doc, invoice)
+        except Exception as e:
+            frappe.log_error(f"Main Dimension Error: {str(e)}\n{frappe.get_traceback()}", "Main Dimension Error")
+
+        # Apply dimensions to each child item
+        try:
+            for i, row in enumerate(rows):
+                if i < len(invoice.items):
+                    set_dimension(doc, invoice, src_child=row, tr_child=invoice.items[i])
+        except Exception as e:
+            frappe.log_error(f"Child Dimension Error: {str(e)}\n{frappe.get_traceback()}", "Child Dimension Error")
+
+        # Finalize invoice
+        frappe.flags.ignore_account_permission = True
+        invoice.set_taxes()
+        invoice.set_missing_values()
+        invoice.flags.ignore_mandatory = True
+        invoice.calculate_taxes_and_totals()
+        invoice.insert(ignore_permissions=True)
+
+        # Update transport rows with the invoice name
+        try:
+            names_set = {i["name"] for i in rows}
+            for item in doc.assign_transport:
+                if item.name in names_set:
+                    item.invoice = invoice.name
+            doc.save()
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "Assign Transport Update Error")
+
+        frappe.msgprint(_("Sales Invoice {0} Created").format(invoice.name), alert=True)
+        return invoice
+
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "Sales Invoice Creation Failed")
+        frappe.throw(_("An unexpected error occurred while creating Sales Invoice."))
