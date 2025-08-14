@@ -99,15 +99,15 @@ def set_dimension(src_doc, tr_doc, src_child=None, tr_child=None):
                 target_info = f"Skipped: Unknown target_type={dim.target_type}"
 
             # Log the mapping attempt
-            frappe.log_error(
-                f"""Dimension: {dim.dimension_name}
-                Source DocType: {dim.source_doctype}
-                Target DocType: {dim.target_doctype}
-                Source: {source_info}
-                Target: {target_info}
-                Value: {value}""",
-                "set_dimension mapping"
-            )
+            # frappe.log_error(
+            #     f"""Dimension: {dim.dimension_name}
+            #     Source DocType: {dim.source_doctype}
+            #     Target DocType: {dim.target_doctype}
+            #     Source: {source_info}
+            #     Target: {target_info}
+            #     Value: {value}""",
+            #     "set_dimension mapping"
+            # )
 
         except Exception as e:
             frappe.log_error(f"Error processing dimension {dim.dimension_name}: {str(e)}\nTraceback: {frappe.get_traceback()}", "set_dimension")
